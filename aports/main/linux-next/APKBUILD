@@ -1,0 +1,179 @@
+# APKBUILD based on linux-postmarketos aport. Changes:
+#
+# - use linux-next branch instead of stable
+
+_flavor=next
+_hash="36ef71cae353f88fd6e095e2aaa3e5953af1685d"
+_config="config-${_flavor}.${CARCH}"
+
+pkgname=linux-${_flavor}
+
+pkgver=4.14.0
+case $pkgver in
+	*.*.*)	_kernver=${pkgver%.*};;
+	*.*) _kernver=$pkgver;;
+esac
+pkgrel=0
+
+arch="all"
+pkgdesc="Linux for pmOS supported chipsets (linux-next)"
+url="https://kernel.org/"
+depends="postmarketos-mkinitfs"
+makedepends="perl sed installkernel bash gmp-dev bc linux-headers elfutils-dev openssl-dev"
+options="!strip !check !tracedeps"
+install=
+source="
+	https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/snapshot/linux-next-${_hash}.tar.gz
+	config-${_flavor}.armhf
+	config-${_flavor}.aarch64
+	config-${_flavor}.x86_64
+	001-sony-amami-dts.patch
+"
+
+subpackages="$pkgname-dev::$CBUILD_ARCH"
+
+license="GPL2"
+_abi_release=${pkgver}
+_carch=${CARCH}
+case "$_carch" in
+aarch64*) _carch="arm64" ;;
+arm*) _carch="arm" ;;
+ppc*) _carch="powerpc" ;;
+s390*) _carch="s390" ;;
+esac
+
+HOSTCC="${CC:-gcc}"
+HOSTCC="${HOSTCC#${CROSS_COMPILE}}"
+
+ksrcdir="$srcdir/${pkgname}-${_hash}"
+
+prepare() {
+	local _patch_failed=
+	cd "$ksrcdir"
+	# first apply patches in specified order
+	for i in $source; do
+		case $i in
+		*.patch)
+			msg "Applying $i..."
+			if ! patch -s -p1 -N -i "$srcdir"/$i; then
+				echo $i >>failed
+				_patch_failed=1
+			fi
+			;;
+		esac
+	done
+
+	if ! [ -z "$_patch_failed" ]; then
+		error "The following patches failed:"
+		cat failed
+		return 1
+	fi
+
+	mkdir -p "$srcdir"/build
+	cp -v "$srcdir"/$_config "$srcdir"/build/.config
+	make -C "$ksrcdir" O="$srcdir"/build ARCH="$_carch" HOSTCC="$HOSTCC" \
+		olddefconfig
+}
+
+
+
+# this is so we can do: 'abuild menuconfig' to reconfigure kernel
+menuconfig() {
+	cd "$srcdir"/build
+	make ARCH="$_carch" menuconfig
+	cp .config "$startdir"/$_config
+}
+
+build() {
+	cd "$srcdir"/build
+	unset LDFLAGS
+	make ARCH="$_carch" CC="${CC:-gcc}" \
+		KBUILD_BUILD_VERSION="$((pkgrel + 1 ))-${_flavor}" \
+		CFLAGS_MODULE=-fno-pic
+}
+
+package() {
+	cd "$srcdir/build/arch/${_carch}/boot"
+
+	if [ "$CARCH" == "aarch64" ]; then
+		install -Dm644 "$srcdir/build/arch/${_carch}/boot/Image" \
+			"$pkgdir/boot/vmlinuz-$_flavor"
+	else
+		install -Dm644 "$srcdir/build/arch/${_carch}/boot/"*zImage \
+			"$pkgdir/boot/vmlinuz-$_flavor"
+	fi
+
+	install -D "$srcdir/build/include/config/kernel.release" \
+		"$pkgdir/usr/share/kernel/$_flavor/kernel.release"
+
+	cd "$srcdir"/build
+
+	local _install
+	case "$CARCH" in
+	aarch64*|arm*)	_install="modules_install dtbs_install" ;;
+	*)		_install="modules_install" ;;
+	esac
+
+	make -j1 $_install \
+		ARCH="$_carch" \
+		INSTALL_MOD_PATH="$pkgdir" \
+		INSTALL_DTBS_PATH="$pkgdir/usr/share/dtb"
+}
+
+
+dev() {
+	# copy the only the parts that we really need for build 3rd party
+	# kernel modules and install those as /usr/src/linux-headers,
+	# simlar to what ubuntu does
+	#
+	# this way you dont need to install the 300-400 kernel sources to
+	# build a tiny kernel module
+	#
+	pkgdesc="Headers and script for third party modules for postmarketos kernel"
+	depends="gmp-dev bash perl"
+	local dir="$subpkgdir"/usr/src/linux-headers-${_abi_release}
+
+	# first we import config, run prepare to set up for building
+	# external modules, and create the scripts
+	mkdir -p "$dir"
+	cp "$srcdir"/$_config "$dir"/.config
+	make -j1 -C "$ksrcdir" O="$dir" ARCH="$_carch" HOSTCC="$HOSTCC" \
+		olddefconfig prepare modules_prepare scripts
+
+	# needed for 3rd party modules
+	# https://bugzilla.kernel.org/show_bug.cgi?id=11143
+	case "$CARCH" in
+	ppc*) (cd "$dir" && make arch/powerpc/lib/crtsavres.o);;
+	esac
+
+	# remove the stuff that points to real sources. we want 3rd party
+	# modules to believe this is the soruces
+	rm "$dir"/Makefile "$dir"/source
+
+	# copy the needed stuff from real sources
+	#
+	# this is taken from ubuntu kernel build script
+	# http://kernel.ubuntu.com/git/ubuntu/ubuntu-zesty.git/tree/debian/rules.d/3-binary-indep.mk
+
+	cd "$ksrcdir"
+	find . -path './include/*' -prune \
+		-o -path './scripts/*' -prune -o -type f \
+		\( -name 'Makefile*' -o -name 'Kconfig*' -o -name 'Kbuild*' -o \
+		   -name '*.sh' -o -name '*.pl' -o -name '*.lds' \) \
+		-print | cpio -pdm "$dir"
+	cp -a scripts include "$dir"
+	find $(find arch -name include -type d -print) -type f \
+		| cpio -pdm "$dir"
+
+	install -Dm644 "$srcdir"/build/Module.symvers \
+		"$dir"/Module.symvers
+
+	mkdir -p "$subpkgdir"/lib/modules/${_abi_release}
+	ln -sf /usr/src/linux-headers-${_abi_release} \
+		"$subpkgdir"/lib/modules/${_abi_release}/build
+}
+sha512sums="9ab587abaa38ff116d6e15cfa78fb105d44c4a45551220ad9242f43535db050829449a6b91bc7b34b6db7b5427510fb761d91ab4a3360928e82a62cffd14a2cc  linux-next-36ef71cae353f88fd6e095e2aaa3e5953af1685d.tar.gz
+42e80bcc41f889153b4c1488569a9aee67e934b7bacaa020d4fc5a6818851a921eadd3553c24d5c1c60220df400db9fa370a39e8c092d191749fd29673fb29e7  config-next.armhf
+139439d35e21d2bf7a9586f6fefef42a70ada272b4e3f79cc3374965cf903564852ce7b8b06755584bb5419556719fd4de3180a87a1dd37c48f5daa92f6bfaf5  config-next.aarch64
+b44ed5b1314d1c343de7e8815559473cc282ecf56a67c0dbdaba28a5efe2d3468a6a4d5304330eed301488da5e19815bcd6c04969d31e426698efa384d572074  config-next.x86_64
+157725b0fd021f1cd30b77e9c586aa4fdeac8de19302cf7b019aac9f8f49ae6301622c9ebeb1d2faf865f2761a6e3bf4021ae0ce74809cebd4b696c9327356c6  001-sony-amami-dts.patch"
