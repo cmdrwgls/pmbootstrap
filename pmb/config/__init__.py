@@ -157,6 +157,7 @@ necessary_kconfig_options = {
     "DEVTMPFS_MOUNT": False,
     "DM_CRYPT": True,
     "VT": True,
+    "SYSVIPC": True
 }
 
 
