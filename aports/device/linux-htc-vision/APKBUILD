@@ -1,14 +1,3 @@
-# APKBUILD based on linux-vanilla aport. Changes:
-# - disabled module installation
-# - add !check !tracedeps
-# - add xz package (necessary to build)
-#
-# Kernel config based on: arch/arm/configs/bravo_defconfig
-# Changes:
-# - apply patches to compile with gcc6
-# - enable devtmpfs (needed for udev -> touch support in weston)
-# - enable udev required options (https://wiki.gentoo.org/wiki/Udev#Kernel)
-
 _vendor=htc
 _flavor=htc-vision
 _config="config-${_flavor}.armhf"

@@ -1,6 +1,6 @@
 pkgname=device-htc-vision
-pkgver=1
-pkgrel=1
+pkgver=0.1
+pkgrel=0
 pkgdesc="HTC Desire Z"
 url="https://github.com/postmarketOS"
 arch="noarch"
@@ -12,10 +12,6 @@ subpackages=""
 source="deviceinfo 90-android.rules"
 options="!check"
 
-build() {
-	return 0
-}
-
 package() {
 	install -D -m644 "$srcdir/deviceinfo" \
 		"$pkgdir/etc/deviceinfo"
@@ -23,5 +19,5 @@ package() {
 		"$pkgdir"/etc/udev/rules.d/90-android.rules
 }
 
-sha512sums="a02575f8b192e0bbde9c6c7be2e7a8ac8c434e99e0c22c4eaef27b45ed07668892c7a4425d604cb95a3000ea99b1330a5c58c168039eb33edbf3827fc30558e5  deviceinfo
-8aead706ddb118a44de7d049f07d10a27e727d17724058d132e4ec4fa73fed29c9ccfe03f02aca459c922ec0fbba24e171fe3c76e33f7c5462631e3dd5506e36  90-android.rules"
+sha512sums="3560346c8395ba74217238ee4e053d2c40706c6595d11db20e56cfe6eeeca90f6774dedc89efb7761da81f4258c2785a11581621564c3ec5710d581b20cfcb22  deviceinfo
+f422025c72373ad792fa753bbeca4a5bbabd9db2aed8240b8f6efc0d270187c8b7d4ef3aa2d59d1b09c45b7fbed7bc5e6393a64af9202889f6445d40cb385553  90-android.rules"

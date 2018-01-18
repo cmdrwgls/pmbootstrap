@@ -28,6 +28,3 @@ kernel_cmdline="no_console_suspend=1"
 generate_bootimg="true"
 bootimg_qcdt="false"
 
-# Weston
-deviceinfo_weston_core_modules="xwayland.so"
-
